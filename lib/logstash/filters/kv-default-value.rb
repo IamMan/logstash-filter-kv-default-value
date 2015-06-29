@@ -25,8 +25,8 @@ require "logstash/namespace"
 # in case your data is not structured using `=` signs and whitespace.
 # For example, this filter can also be used to parse query parameters like
 # `foo=bar&baz=fizz` by setting the `field_split` parameter to `&`.
-class LogStash::Filters::KV < LogStash::Filters::Base
-  config_name "kv"
+class LogStash::Filters::KV-default-value < LogStash::Filters::Base
+  config_name "kv-default-valu"
 
   # A string of characters to trim from the value. This is useful if your
   # values are wrapped in brackets or are terminated with commas (like postfix
@@ -158,6 +158,15 @@ class LogStash::Filters::KV < LogStash::Filters::Base
   #     }
   config :default_keys, :validate => :hash, :default => {}
 
+  # A value wich should be added to key if in log present only key
+  # [source,ruby]
+  #     filter {
+  #       kv {
+  #         default_value => "true"
+  #       }
+  #     }
+  config :default_value, :validate => :string, :default => ""
+
   # A bool option for removing duplicate key/value pairs. When set to false, only 
   # one unique key/value pair will be preserved.
   #
@@ -175,7 +184,7 @@ class LogStash::Filters::KV < LogStash::Filters::Base
   def register
     @trim_re = Regexp.new("[#{@trim}]") if !@trim.nil?
     @trimkey_re = Regexp.new("[#{@trimkey}]") if !@trimkey.nil?
-    @scan_re = Regexp.new("((?:\\\\ |[^"+@field_split+@value_split+"])+)["+@value_split+"](?:\"([^\"]+)\"|'([^']+)'|((?:\\\\ |[^"+@field_split+"])+))")
+    @scan_re = Regexp.new("((?:\\\\ |[^"+@field_split+@value_split+"])+)["+@value_split+"]?(?:\"([^\"]+)\"|'([^']+)'|((?:\\\\ |[^"+@field_split+"])+))|(["+@field_split+"])")
   end # def register
 
   def filter(event)
@@ -226,8 +235,8 @@ class LogStash::Filters::KV < LogStash::Filters::Base
     include_keys = @include_keys.map{|key| event.sprintf(key)}
     exclude_keys = @exclude_keys.map{|key| event.sprintf(key)}
     
-    text.scan(@scan_re) do |key, v1, v2, v3|
-      value = v1 || v2 || v3
+    text.scan(@scan_re) do |key, v1, v2, v3, v4|
+      value = v1 || v2 || v3 || v4
       key = @trimkey.nil? ? key : key.gsub(@trimkey_re, "")
       
       # Bail out as per the values of include_keys and exclude_keys
@@ -237,6 +246,10 @@ class LogStash::Filters::KV < LogStash::Filters::Base
       key = event.sprintf(@prefix) + key
 
       value = @trim.nil? ? value : value.gsub(@trim_re, "")
+      if value.nil? and not @default_value 
+        next
+      else
+        value = @default_value 
 
       # Bail out if inserting duplicate value in key mapping when unique_values 
       # option is set to true.
